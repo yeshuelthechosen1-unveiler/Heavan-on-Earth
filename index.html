@@ -349,7 +349,7 @@
         <button class="copy-btn" onclick="copyLink(this)">Copy Link</button>
     </div>
 
-    <div class="preamble">
+    <div class="preamble" id="preamble-section">
         <span class="article-number">Article 0 &mdash; Establishment of Authority</span>
         <h2>Who Speaks &mdash; And From Where</h2>
         <p><em>Original authorship: Darius J. Wright &mdash; Incorporated herein by George E. Perez II in service of this mission</em></p>
@@ -1244,29 +1244,81 @@ function buildToc() {
     if (!activePanel || !tocList) return;
 
     tocList.innerHTML = '';
+
+    // Collect all navigable sections from the active panel
+    const sections = [];
+
+    // 1. Find .article elements (most tabs)
     const articles = activePanel.querySelectorAll('.article');
-
-    articles.forEach((article, index) => {
+    articles.forEach(article => {
         const header = article.querySelector('.article-header-text');
-        if (!header) return;
+        if (header) {
+            const heading = header.querySelector('h2, h3, h4');
+            if (heading) {
+                sections.push({
+                    id: article.id,
+                    text: heading.textContent.trim(),
+                    element: article,
+                    isArticle: true
+                });
+            }
+        }
+    });
 
-        const numberEl = header.querySelector('.article-number');
-        const heading = header.querySelector('h2, h3, h4');
-        if (!heading) return;
+    // 2. Find .preamble elements (Preamble tab)
+    const preambles = activePanel.querySelectorAll('.preamble');
+    preambles.forEach((preamble, idx) => {
+        const heading = preamble.querySelector('h2');
+        if (heading) {
+            // Give it an ID if it doesn't have one
+            if (!preamble.id) preamble.id = 'preamble-section-' + idx;
+            sections.push({
+                id: preamble.id,
+                text: heading.textContent.trim(),
+                element: preamble,
+                isArticle: false
+            });
+        }
+    });
 
+    // 3. Find direct h2/h3 headings inside the panel (fallback)
+    if (sections.length === 0) {
+        const directHeadings = activePanel.querySelectorAll('h2, h3');
+        directHeadings.forEach((heading, idx) => {
+            if (!heading.closest('.article') && !heading.closest('.preamble')) {
+                if (!heading.id) heading.id = 'section-' + idx;
+                sections.push({
+                    id: heading.id,
+                    text: heading.textContent.trim(),
+                    element: heading,
+                    isArticle: false
+                });
+            }
+        });
+    }
+
+    // Build TOC list
+    if (sections.length === 0) {
+        tocList.innerHTML = '<li><a href="#" style="color:var(--text-light); font-style:italic;">No sections in this tab</a></li>';
+        return;
+    }
+
+    sections.forEach(section => {
         const li = document.createElement('li');
         const a = document.createElement('a');
-        a.href = '#' + article.id;
-        a.textContent = heading.textContent.trim();
+        a.href = '#' + section.id;
+        a.textContent = section.text;
         a.className = 'toc-l1';
         a.onclick = function(e) {
             e.preventDefault();
             closeToc();
-            // Expand the article if collapsed
-            article.classList.remove('collapsed');
-            const content = article.querySelector('.article-content');
-            if (content) content.style.maxHeight = content.scrollHeight + 'px';
-            article.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (section.isArticle) {
+                // Expand the article if collapsed
+                section.element.classList.remove('collapsed');
+                const content = section.element.querySelector('.article-content');
+                if (content) content.style.maxHeight = content.scrollHeight + 'px';
+            }
+            section.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         };
         li.appendChild(a);
         tocList.appendChild(li);
@@ -1391,6 +1443,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Build initial TOC
     buildToc();
+
+    // Also rebuild TOC whenever tab changes
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setTimeout(buildToc, 100); // Small delay to let tab switch complete
+        });
+    });
 
     // Initialize resonance display
     updateResonanceDisplay();
